@@ -9,9 +9,9 @@
 
 <h1 align="center">SteamArt</h1>
 
-<p align="center">
-  <strong>Metadados e arte (capa/hero/logo/ícone) para atalhos não-Steam na biblioteca do Steam</strong><br>
-  <em>Usa o catálogo oficial da Steam (CDN) ou a comunidade SteamGridDB</em>
+  <p align="center">
+  <strong>Aplica metadados e arte (capa/hero/logo/ícone) para atalhos não-Steam na biblioteca do Steam</strong><br>
+  <em>Usa o catálogo oficial da Steam (CDN) ou a comunidade SteamGridDB — app nativo portátil, qualquer distro</em>
 </p>
 
 <p align="center">
@@ -43,9 +43,19 @@
 
 ### Visão geral
 
-O **SteamArt** reúne o que fazem o [Decky-Metadata](https://github.com/beallio/Decky-Metadata) e o [decky-steamgriddb](https://github.com/SteamGridDB/decky-steamgriddb) em um **app nativo Linux** (Go + Fyne).  
+O **SteamArt** é um app **nativo Linux** (Go + Fyne) — sem browser, sem roda,
+sem dependência de interface web.  
 
-Ele corresponde seus jogos **não-Steam** ao catálogo da Steam e aplica **capas, hero, logo e ícone** — seja baixando a arte oficial do CDN da Steam, seja escolhendo imagens da comunidade no **SteamGridDB** (com filtro para arte animada).
+Ele substitui o fluxo "abrir navegador → copiar → colar na grid" por: basta
+rodar o programa que ele lê sua `shortcuts.vdf`, faz o matching e aplica a arte
+diretamente na pasta `grid` que o Steam lê. Ideal para quem usa emuladores,
+jogos da GOG, ou qualquer jogo adicionado manualmente na biblioteca.
+
+**Como funciona:** detecta a Steam (nativa ou Flatpak), lista seus atalhos não-Steam,
+casa cada jogo com o app da loja via nome + heurísticas de título, e baixa a arte
+correta (grid/hero/logo/icon). Você escolhe entre a arte **oficial da Steam**
+(CDN, alta qualidade) ou a **comunidade SteamGridDB** (mais opções, incluindo
+arte animada/webp). Tudo com backup automático antes de sobrescrever.
 
 > ✅ Não depende do Decky Loader nem do modo Big Picture  
 > ✅ Escreve direto na pasta `grid` do Steam  
@@ -229,9 +239,20 @@ internal/
 
 ### Overview
 
-**SteamArt** combines the functionality of [Decky-Metadata](https://github.com/beallio/Decky-Metadata) and [decky-steamgriddb](https://github.com/SteamGridDB/decky-steamgriddb) into a **native Linux app** (Go + Fyne).  
+**SteamArt** is a **native Linux app** (Go + Fyne) — no browser, no web server,
+no external dependencies at runtime beyond a standard desktop environment.  
 
-It matches your **non-Steam games** to the Steam catalog and applies **grid, hero, logo, and icon** artwork — either by downloading official art from the Steam CDN or by selecting community images from **SteamGridDB** (with animated-art filter).
+It replaces the "open browser → copy → paste into grid" workflow with a simple
+GUI: just run the program, and it reads your `shortcuts.vdf`, matches each
+non-Steam game to its Steam store listing, and applies the correct artwork
+(grid/hero/logo/icon) directly to your `grid` folder. Perfect for emulator
+games, GOG imports, or anything you've added manually to your Steam library.
+
+**How it works:** detects Steam (native or Flatpak), lists your non-Steam
+shortcuts, matches each game to the store via title heuristics, and downloads
+the right art — either **official Steam CDN** assets (highest quality) or
+**SteamGridDB community** images (more options, including animated/webp).
+Everything is backed up first to `grid/backup/` before overwriting.
 
 > ✅ No Decky Loader or Big Picture mode required  
 > ✅ Writes directly to Steam's `grid` folder  
