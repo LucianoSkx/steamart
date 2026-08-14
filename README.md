@@ -92,6 +92,10 @@ chmod +x SteamArt-*.AppImage
 > **Sem instalação, sem root, roda em qualquer distro.**  
 > Baixe em: [Releases](https://github.com/LucianoSkx/steamart/releases)
 
+**Pré-requisito de runtime:** o AppImage precisa que seu sistema tenha uma
+interface gráfica com **libGL** e **X11/Wayland** (presentes na maioria das distros
+desktop). Em servidores headless, instale `libgl1` e `libgtk-3-0`.
+
 #### 🛠️ Opção 2 — Script de instalação (compila do fonte)
 
 ```bash
@@ -385,18 +389,19 @@ internal/
 
 ---
 
-### Contributing
+### Contributing / Contribuindo
 
-1. Fork the repo
-2. Create a branch: `git checkout -b feature/my-feature`
-3. Commit: `git commit -m "feat: my feature"`
-4. Push: `git push origin feature/my-feature`
-5. Open a Pull Request
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full guide. Em resumo:
 
-> Code follows `gofmt`, `go vet` and tests (`go test ./...`). CI runs all checks automatically.
+1. Fork → branch → code → test (`make test`) → PR
+2. Follow `gofmt`, `go vet` and keep tests green
+3. Comments in Portuguese (pt-BR)
+4. Releases are automatic via tags (`git tag vX.Y.Z && git push --tags`)
+
+Veja o [CHANGELOG.md](CHANGELOG.md) para histórico de versões.
 
 ---
 
-### License
+### License / Licença
 
-**MIT** — see [LICENSE](LICENSE).
+**MIT** — veja [LICENSE](LICENSE).
