@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SteamMetaGrid — Metadados + SteamGridDB</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header>
+  <h1>SteamMetaGrid</h1>
+  <span id="status" class="status">carregando…</span>
+  <div class="sgdb-key">
+    <input id="sgdb-key" type="password" placeholder="SteamGridDB API key" />
+    <button id="sgdb-save">Salvar</button>
+    <span id="sgdb-status" class="badge"></span>
+  </div>
+  <button id="auto-all">Auto-match tudo</button>
+  <button id="refresh">Atualizar</button>
+</header>
+
+<main id="list"></main>
+
+<div id="meta-modal" class="modal hidden">
+  <div class="modal-box">
+    <button class="close" data-close>×</button>
+    <div id="meta-body"></div>
+  </div>
+</div>
+
+<div id="log-modal" class="modal hidden">
+  <div class="modal-box">
+    <button class="close" data-close>×</button>
+    <h2>Logs</h2>
+    <pre id="log-body"></pre>
+  </div>
+</div>
+
+<button id="logs-btn" class="floating">Logs</button>
+
+<script src="/app.js"></script>
+</body>
+</html>

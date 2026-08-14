@@ -1,0 +1,9 @@
+# Binários e build
+steamart
+*.exe
+
+# Dados locais de ferramentas
+.serena/
+
+# Logs
+*.log

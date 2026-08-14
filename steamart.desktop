@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=SteamArt
+Comment=Metadados e arte para jogos não-Steam na biblioteca do Steam (app nativo)
+Exec=/home/luciano/Projetos/steamart/steamart
+Icon=/home/luciano/.local/share/icons/steamart.png
+Terminal=false
+Type=Application
+Categories=Game;Utility;
