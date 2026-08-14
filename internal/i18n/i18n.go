@@ -86,7 +86,7 @@ var dict = map[string]entry{
 	"about_title":        {"Sobre o SteamArt", "About SteamArt"},
 	"app_name":           {"SteamArt", "SteamArt"},
 	"about_desc":         {"Aplica metadados e arte (capa/hero/logo/ícone) em atalhos não-Steam da Steam, usando o catálogo oficial (CDN) ou a comunidade SteamGridDB.", "Applies metadata and art (grid/hero/logo/icon) to non-Steam Steam shortcuts, using the official Steam catalog (CDN) or the SteamGridDB community."},
-	"about_links":        {"GitHub: https://github.com/SEU_USUARIO/steamart", "GitHub: https://github.com/SEU_USUARIO/steamart"},
+	"about_links":        {"GitHub: https://github.com/LucianoSkx/steamart", "GitHub: https://github.com/LucianoSkx/steamart"},
 	"tab_grid":           {"grid", "grid"},
 	"tab_hero":           {"hero", "hero"},
 	"tab_logo":           {"logo", "logo"},

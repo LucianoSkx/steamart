@@ -39,7 +39,7 @@ e escreve direto na pasta `grid` do Steam.
 ### Opção 1 — AppImage (recomendado, qualquer distro)
 
 Baixe o `SteamArt-*.AppImage` na página de
-[Releases](https://github.com/SEU_USUARIO/steamart/releases), dê permissão de
+[Releases](https://github.com/LucianoSkx/steamart/releases), dê permissão de
 execução e rode:
 
 ```bash
