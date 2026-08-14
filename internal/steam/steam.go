@@ -35,8 +35,12 @@ func Discover() (*Steam, error) {
 		roots = append(roots, v)
 	}
 	if h, err := os.UserHomeDir(); err == nil {
-		roots = append(roots, filepath.Join(h, ".steam", "steam"))
-		roots = append(roots, filepath.Join(h, ".local", "share", "Steam"))
+		roots = append(roots,
+			filepath.Join(h, ".steam", "steam"),
+			filepath.Join(h, ".local", "share", "Steam"),
+			// Steam instalado via Flatpak (comum em distros como Fedora, Pop!_OS, Endeavour)
+			filepath.Join(h, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"),
+		)
 	}
 
 	for _, r := range roots {

@@ -1,6 +1,13 @@
 # Binários e build
 steamart
+steamart-web
 *.exe
+
+# Build de AppImage (ferramentas e trabalho temporário)
+AppDir/
+linuxdeploy-x86_64.AppImage
+linuxdeploy-plugin-go.sh
+SteamArt-*.AppImage
 
 # Dados locais de ferramentas
 .serena/

@@ -8,12 +8,12 @@ import (
 
 func TestSuffix(t *testing.T) {
 	cases := map[string]string{
-		"grid":   "p",
-		"hero":   "_hero",
-		"logo":   "_logo",
-		"icon":   "_icon",
+		"grid":    "p",
+		"hero":    "_hero",
+		"logo":    "_logo",
+		"icon":    "_icon",
 		"capsule": "",
-		"":       "p",
+		"":        "p",
 	}
 	for in, want := range cases {
 		if got := Suffix(in); got != want {

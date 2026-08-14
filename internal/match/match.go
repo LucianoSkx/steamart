@@ -8,6 +8,9 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"steamart/internal/delisted"
+	"steamart/internal/title"
 )
 
 const (
@@ -77,57 +80,78 @@ func Search(term string) ([]SearchResult, error) {
 }
 
 // AutoMatch escolhe o melhor resultado de busca para um nome de atalho.
-func AutoMatch(term string) (*SearchResult, error) {
+// Primeiro tenta a loja (descartando variantes não-primárias quando há
+// alternativas); se nada casar bem, tenta o índice de jogos delisted.
+func AutoMatch(term string, delistedApps []delisted.App) (*SearchResult, error) {
 	results, err := Search(term)
 	if err != nil {
 		return nil, err
 	}
-	if len(results) == 0 {
-		return nil, nil
+	if best := pickBest(term, results); best != nil {
+		return best, nil
 	}
-	best := results[0]
-	bestScore := score(term, best.Name)
-	for _, r := range results[1:] {
-		s := score(term, r.Name)
+	if appid := delisted.ResolveAppID(term, delistedApps); appid != 0 {
+		return &SearchResult{AppID: appid, Name: term}, nil
+	}
+	return nil, nil
+}
+
+// pickBest escolhe o melhor resultado entre os da loja: ignora variantes
+// não-primárias (demo, beta, soundtrack, DLC...) quando existem alternativas
+// e prioriza nomes com a mesma forma normalizada.
+func pickBest(term string, results []SearchResult) *SearchResult {
+	if len(results) == 0 {
+		return nil
+	}
+	pool := results
+	var primaries []SearchResult
+	for _, r := range results {
+		if !title.IsNonPrimaryTitle(r.Name) {
+			primaries = append(primaries, r)
+		}
+	}
+	if len(primaries) > 0 {
+		pool = primaries
+	}
+	best := &pool[0]
+	bestScore := matchScore(term, best.Name)
+	for i := 1; i < len(pool); i++ {
+		s := matchScore(term, pool[i].Name)
 		if s > bestScore {
 			bestScore = s
-			best = r
+			best = &pool[i]
 		}
 	}
 	if bestScore < 0.5 {
-		return nil, nil
+		return nil
 	}
-	return &best, nil
+	return best
 }
 
-func score(a, b string) float64 {
-	na := norm(a)
-	nb := norm(b)
-	if na == nb {
+// matchScore mede a cobertura dos tokens normalizados da consulta no
+// candidato (1 = mesma forma normalizada ou todos os tokens presentes).
+// Em empates, a ordem da loja (relevância da Steam) decide.
+func matchScore(term, name string) float64 {
+	tn := title.NormaliseTitle(term)
+	cn := title.NormaliseTitle(name)
+	if tn == cn {
 		return 1
 	}
-	wa := strings.Fields(na)
-	wb := strings.Fields(nb)
-	if len(wa) == 0 || len(wb) == 0 {
+	wa := strings.Fields(tn)
+	if len(wa) == 0 {
 		return 0
 	}
 	set := map[string]bool{}
-	for _, w := range wa {
+	for _, w := range strings.Fields(cn) {
 		set[w] = true
 	}
 	hits := 0
-	for _, w := range wb {
+	for _, w := range wa {
 		if set[w] {
 			hits++
 		}
 	}
-	return float64(hits) / float64(len(wb))
-}
-
-func norm(s string) string {
-	r := strings.NewReplacer(":", "", "-", "", ".", "", "'", "", "!", "", "&", "and")
-	s = r.Replace(strings.ToLower(s))
-	return strings.Join(strings.Fields(s), " ")
+	return float64(hits) / float64(len(wa))
 }
 
 // GetMeta busca os detalhes completos de um app.

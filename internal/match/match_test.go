@@ -2,30 +2,27 @@ package match
 
 import "testing"
 
-func TestNorm(t *testing.T) {
+func TestPickBest(t *testing.T) {
 	cases := []struct {
-		in, want string
+		term    string
+		results []SearchResult
+		want    int
 	}{
-		{"Grand Theft Auto V", "grand theft auto v"},
-		{"GTA: V - Enhanced", "gta v enhanced"},
-		{"Rock & Roll", "rock and roll"},
-		{"  Spaces  Here ", "spaces here"},
+		{"Crysis", []SearchResult{{AppID: 1, Name: "Crysis Demo"}, {AppID: 2, Name: "Crysis"}}, 2},
+		{"Skyrim", []SearchResult{{AppID: 3, Name: "The Elder Scrolls V: Skyrim Special Edition"}}, 3},
+		{"GTA V", []SearchResult{{AppID: 4, Name: "Grand Theft Auto V"}, {AppID: 5, Name: "Grand Theft Auto V - Soundtrack"}}, 4},
+		{"GTA V", []SearchResult{{AppID: 6, Name: "Grand Theft Auto V"}, {AppID: 7, Name: "Grand Theft Auto V: Official Score"}}, 6},
+		{"Baldur's Gate 3", []SearchResult{{AppID: 8, Name: "Baldurs Gate 3"}}, 8},
+		{"Stardew Valley", []SearchResult{{AppID: 9, Name: "Crysis"}}, 0},
 	}
 	for _, c := range cases {
-		if got := norm(c.in); got != c.want {
-			t.Errorf("norm(%q) = %q, want %q", c.in, got, c.want)
+		got := pickBest(c.term, c.results)
+		if c.want == 0 && got != nil {
+			t.Errorf("pickBest(%q) = %+v, want nil", c.term, got)
+			continue
 		}
-	}
-}
-
-func TestScore(t *testing.T) {
-	if s := score("GTA V", "Grand Theft Auto V"); s < 0.2 {
-		t.Errorf("score GTA V = %v, want >= 0.2", s)
-	}
-	if s := score("Baldur's Gate 3", "Baldurs Gate 3"); s != 1 {
-		t.Errorf("score identical = %v, want 1", s)
-	}
-	if s := score("Cyberpunk 2077", "Stardew Valley"); s > 0.2 {
-		t.Errorf("score unrelated = %v, want ~0", s)
+		if c.want != 0 && (got == nil || got.AppID != c.want) {
+			t.Errorf("pickBest(%q) = %+v, want appid %d", c.term, got, c.want)
+		}
 	}
 }
