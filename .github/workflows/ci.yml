@@ -21,6 +21,14 @@ jobs:
         with:
           go-version: 'stable'
 
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc libgtk-3-dev libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev xorg-dev libxcursor-dev libxrandr-dev \
+            libxinerama-dev libxi-dev
+
       - name: Build (gui)
         run: go build ./...
 
