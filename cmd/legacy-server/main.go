@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"steamart/internal/artwork"
+	"steamart/internal/delisted"
 	"steamart/internal/match"
 	"steamart/internal/sgdb"
 	"steamart/internal/steam"
@@ -32,10 +33,11 @@ var webFS embed.FS
 var port = 8731
 
 var (
-	steamClient *steam.Steam
-	matches     *store.Store
-	logger      = &store.Logger{}
-	sgdbKey     string
+	steamClient   *steam.Steam
+	matches       *store.Store
+	logger        = &store.Logger{}
+	sgdbKey       string
+	delistedIndex *delisted.Index
 )
 
 type shortcutView struct {
@@ -56,6 +58,9 @@ func main() {
 	matches, err = store.Open(s.Config)
 	if err != nil {
 		log.Fatalf("não abri o store: %v", err)
+	}
+	if idx := delisted.Ensure(nil, filepath.Join(s.Config, "delisted_index.json"), false); idx != nil {
+		delistedIndex = idx
 	}
 	_ = logger.SetFile(filepath.Join(s.Config, "steamart.log"))
 	if b, rerr := os.ReadFile(filepath.Join(s.Config, "steamart-sgdb.json")); rerr == nil {
@@ -163,7 +168,7 @@ func handleAutoMatch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	res, err := match.AutoMatch(sc.AppName)
+	res, err := match.AutoMatch(sc.AppName, delistedApps())
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -417,7 +422,7 @@ func handleAutoMatchAll(w http.ResponseWriter, r *http.Request) {
 		var name string
 		m := matches.Get(sc.AppID)
 		if m == nil {
-			res, e := match.AutoMatch(sc.AppName)
+			res, e := match.AutoMatch(sc.AppName, delistedApps())
 			if e != nil {
 				addErr(sc.AppName, e.Error())
 				continue
@@ -495,6 +500,13 @@ func handleRemove(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.Add(fmt.Sprintf("arte removida do atalho %d (%d arquivos)", body.ShortcutAppID, removed))
 	writeJSON(w, map[string]any{"removed": removed})
+}
+
+func delistedApps() []delisted.App {
+	if delistedIndex == nil {
+		return nil
+	}
+	return delistedIndex.Apps
 }
 
 func findShortcut(appid uint32) (*steam.Shortcut, error) {

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build, Vet & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc libgtk-3-dev libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev xorg-dev libxcursor-dev libxrandr-dev \
+            libxinerama-dev libxi-dev
+
+      - name: Build (gui)
+        run: go build ./...
+
+      - name: Build (legacy-server, -tags legacy)
+        run: go build -tags legacy ./cmd/legacy-server
+
+      - name: Vet (gui)
+        run: go vet ./...
+
+      - name: Vet (legacy-server, -tags legacy)
+        run: go vet -tags legacy ./cmd/legacy-server/...
+
+      - name: Test
+        run: go test ./...
