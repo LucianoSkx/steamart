@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build, Vet & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Build (gui)
+        run: go build ./...
+
+      - name: Build (legacy-server, -tags legacy)
+        run: go build -tags legacy ./cmd/legacy-server
+
+      - name: Vet (gui)
+        run: go vet ./...
+
+      - name: Vet (legacy-server, -tags legacy)
+        run: go vet -tags legacy ./cmd/legacy-server/...
+
+      - name: Test
+        run: go test ./...

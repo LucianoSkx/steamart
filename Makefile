@@ -5,6 +5,8 @@
 #   make install    instala no sistema (precisa de sudo/DESTDIR)
 #   make test       roda os testes
 #   make appimage   gera o AppImage via build-appimage.sh
+#   make legacy     compila o servidor HTTP legado (build tag -tags legacy)
+#   make check      build + vet (gui e legado) + testes
 #   make clean      remove o binário
 
 BINARY  := steamart
@@ -13,12 +15,15 @@ PREFIX  ?= /usr/local
 DATADIR := $(PREFIX)/share
 DESTDIR ?=
 
-.PHONY: all build install uninstall test fmt vet appimage clean
+.PHONY: all build legacy install uninstall test fmt vet vet-legacy check appimage clean
 
 all: build
 
 build:
 	go build -o $(BINARY) $(PKG)
+
+legacy:
+	go build -tags legacy -o /dev/null ./cmd/legacy-server
 
 test:
 	go test ./...
@@ -28,6 +33,11 @@ fmt:
 
 vet:
 	go vet ./...
+
+vet-legacy:
+	go vet -tags legacy ./cmd/legacy-server/...
+
+check: build legacy vet vet-legacy test
 
 install: build
 	install -Dm755 $(BINARY) $(DESTDIR)$(PREFIX)/bin/$(BINARY)
