@@ -4,6 +4,15 @@ Todas as mudanças notáveis deste projeto são documentadas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/) e
 [Versionamento Semântico](https://semver.org/).
 
+## [v1.0.3] - 2026-08-18
+
+### Corrigido
+- Servidor legado (`cmd/legacy-server`, build tag `-tags legacy`) voltou a
+  compilar: `match.AutoMatch` passou a receber o índice de jogos delisted
+  (`[]delisted.App`), mantendo o comportamento de auto-match
+- CI (`ci.yml`) agora compila e valida o `legacy-server` com `-tags legacy`,
+  além do build/vet/test do app principal
+
 ## [v1.0.1] - 2026-08-14
 
 ### Corrigido
