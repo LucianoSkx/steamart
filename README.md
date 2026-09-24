@@ -18,6 +18,9 @@
   <a href="https://github.com/LucianoSkx/steamart/releases/latest">
     <img alt="Latest Release" src="https://img.shields.io/github/v/release/LucianoSkx/steamart?label=version&style=flat-square">
   </a>
+  <a href="https://github.com/LucianoSkx/steamart/actions/workflows/ci.yml">
+    <img alt="CI Status" src="https://img.shields.io/github/actions/workflow/status/LucianoSkx/steamart/ci.yml?style=flat-square">
+  </a>
   <a href="https://github.com/LucianoSkx/steamart/actions/workflows/release.yml">
     <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/LucianoSkx/steamart/release.yml?style=flat-square">
   </a>
@@ -51,7 +54,7 @@ rodar o programa que ele lê sua `shortcuts.vdf`, faz o matching e aplica a arte
 diretamente na pasta `grid` que o Steam lê. Ideal para quem usa emuladores,
 jogos da GOG, ou qualquer jogo adicionado manualmente na biblioteca.
 
-**Como funciona:** detecta a Steam (nativa ou Flatpak), lista seus atalhos não-Steam,
+**Como funciona:** detecta a Steam (nativa, Flatpak ou Snap), lista seus atalhos não-Steam,
 casa cada jogo com o app da loja via nome + heurísticas de título, e baixa a arte
 correta (grid/hero/logo/icon). Você escolhe entre a arte **oficial da Steam**
 (CDN, alta qualidade) ou a **comunidade SteamGridDB** (mais opções, incluindo
@@ -71,6 +74,7 @@ arte animada/webp). Tudo com backup automático antes de sobrescrever.
 | **Linux (qualquer distro)** | ✅ Total | AppImage portátil roda em Debian/Ubuntu, Fedora, Arch, Mint, openSUSE, Pop!_OS, Endeavour, etc. |
 | **Steam (nativo)** | ✅ Total | `~/.steam/steam`, `~/.local/share/Steam` |
 | **Steam (Flatpak)** | ✅ Total | `~/.var/app/com.valvesoftware.Steam/.local/share/Steam` |
+| **Steam (Snap)** | ✅ Total | `~/snap/steam/common/.local/share/Steam` |
 | **Steam (custom)** | ✅ Via `STEAM_ROOT` | Defina `STEAM_ROOT=/caminho/para/Steam` se necessário |
 
 ---
@@ -123,6 +127,8 @@ make              # compila ./steamart
 sudo make install # instala no sistema (DESTDIR suportado para empacotamento)
 make appimage     # gera AppImage portátil
 make test         # roda testes
+make check        # build + vet (GUI e legado) + testes
+make legacy       # valida o servidor legado (-tags legacy)
 make clean        # limpa build
 ```
 
@@ -133,7 +139,7 @@ make clean        # limpa build
 | Tipo | Requisito |
 |------|-----------|
 | **Runtime** | Steam instalado com ≥1 atalho não-Steam |
-| **Build (opcional)** | Go 1.22+ + dependências do Fyne |
+| **Build (opcional)** | Go 1.26+ + dependências do Fyne |
 
 **Dependências de build por distro:**
 
@@ -168,8 +174,8 @@ sudo pacman -S go gcc gtk3 mesa libx11 libxrandr libxcursor libxinerama libxi
 go build -o steamart ./cmd/gui
 ./steamart
 
-# Servidor web opcional (mesma funcionalidade, UI HTML)
-go build -o steamart-web ./cmd/legacy-server
+# Servidor web opcional (mesma funcionalidade, UI HTML) — build tag "legacy"
+go build -tags legacy -o steamart-web ./cmd/legacy-server
 ./steamart-web            # http://127.0.0.1:8731
 
 # AppImage portátil
@@ -191,6 +197,10 @@ bash build-appimage.sh    # gera SteamArt-vX.Y.Z-x86_64.AppImage
 - Store search: `store.steampowered.com/api/storesearch` (cc=BR, l=brazilian)
 - Chave SteamGridDB salva em `<steam_config>/steamart-sgdb.json` (perms 0600)
 - Logs em `<steam_config>/steamart.log`
+- Escritas na grid e no store são atômicas (tmp + rename); arte anterior fica
+  em `grid/backup/`, e um `steamart-matches.json` corrompido é preservado em
+  `<arquivo>.corrompido-<data>` em vez de sobrescrito
+- Requisições com falha transitória (429/5xx) são retentadas com backoff (`internal/httpx`)
 
 ---
 
@@ -205,14 +215,19 @@ cmd/
 
 internal/
 ├── vdf/            # Parser de shortcuts.vdf
-├── steam/          # Descoberta do Steam, atalhos e grid
+├── steam/          # Descoberta do Steam (nativo/Flatpak/Snap), atalhos e grid
 ├── match/          # Busca/auto-match e metadados da loja Steam
 ├── artwork/        # Download de arte (CDN + URLs) para a grid
 ├── sgdb/           # Cliente da API SteamGridDB
 ├── store/          # JSON local de matches + logs
 ├── delisted/       # Índice de jogos delisted da Steam
+├── official/       # Assets oficiais do CDN da Steam (grid/hero/logo/icon)
+├── grid/           # Regras de nomes/lock/bkp dos arquivos da grid
+├── atomicfile/     # Escrita atômica (tmp + rename)
+├── httpx/          # Requisições HTTP com retry/backoff e contexto
 ├── title/          # Normalização de títulos para matching
-└── i18n/           # Traduções PT-BR / EN
+├── i18n/           # Traduções PT-BR / EN
+└── icon/           # Ícone embutido (PNG)
 ```
 
 ---
@@ -225,7 +240,7 @@ internal/
 4. Push: `git push origin feature/minha-feature`
 5. Abra um Pull Request
 
-> Código segue `gofmt`, `go vet` e testes (`go test ./...`). O CI roda tudo automaticamente.
+> Rode `make check` (build GUI + legado + vet + testes). O CI também roda `gofmt`, `staticcheck` e `go test -race`.
 
 ---
 
@@ -248,7 +263,7 @@ non-Steam game to its Steam store listing, and applies the correct artwork
 (grid/hero/logo/icon) directly to your `grid` folder. Perfect for emulator
 games, GOG imports, or anything you've added manually to your Steam library.
 
-**How it works:** detects Steam (native or Flatpak), lists your non-Steam
+**How it works:** detects Steam (native, Flatpak or Snap), lists your non-Steam
 shortcuts, matches each game to the store via title heuristics, and downloads
 the right art — either **official Steam CDN** assets (highest quality) or
 **SteamGridDB community** images (more options, including animated/webp).
@@ -268,6 +283,7 @@ Everything is backed up first to `grid/backup/` before overwriting.
 | **Linux (any distro)** | ✅ Full | Portable AppImage runs on Debian/Ubuntu, Fedora, Arch, Mint, openSUSE, Pop!_OS, Endeavour, etc. |
 | **Steam (native)** | ✅ Full | `~/.steam/steam`, `~/.local/share/Steam` |
 | **Steam (Flatpak)** | ✅ Full | `~/.var/app/com.valvesoftware.Steam/.local/share/Steam` |
+| **Steam (Snap)** | ✅ Full | `~/snap/steam/common/.local/share/Steam` |
 | **Steam (custom path)** | ✅ Via `STEAM_ROOT` | Set `STEAM_ROOT=/path/to/Steam` if needed |
 
 ---
@@ -316,6 +332,8 @@ make              # builds ./steamart
 sudo make install # installs system-wide (DESTDIR supported for packaging)
 make appimage     # builds portable AppImage
 make test         # runs tests
+make check        # build + vet (GUI and legacy) + tests
+make legacy       # builds the legacy server (-tags legacy)
 make clean        # cleans build artifacts
 ```
 
@@ -326,7 +344,7 @@ make clean        # cleans build artifacts
 | Type | Requirement |
 |------|-------------|
 | **Runtime** | Steam installed with ≥1 non-Steam shortcut |
-| **Build (optional)** | Go 1.22+ + Fyne system dependencies |
+| **Build (optional)** | Go 1.26+ + Fyne system dependencies |
 
 **Build dependencies by distro:**
 
@@ -361,8 +379,8 @@ sudo pacman -S go gcc gtk3 mesa libx11 libxrandr libxcursor libxinerama libxi
 go build -o steamart ./cmd/gui
 ./steamart
 
-# Optional web server (same features, HTML UI)
-go build -o steamart-web ./cmd/legacy-server
+# Optional web server (same features, HTML UI) — requires the "legacy" build tag
+go build -tags legacy -o steamart-web ./cmd/legacy-server
 ./steamart-web            # http://127.0.0.1:8731
 
 # Portable AppImage
@@ -384,6 +402,10 @@ bash build-appimage.sh    # produces SteamArt-vX.Y.Z-x86_64.AppImage
 - Store search: `store.steampowered.com/api/storesearch` (cc=BR, l=brazilian)
 - SteamGridDB key stored at `<steam_config>/steamart-sgdb.json` (0600 perms)
 - Logs at `<steam_config>/steamart.log`
+- Grid and store writes are atomic (tmp + rename); previous art is kept in
+  `grid/backup/`, and a corrupted `steamart-matches.json` is preserved as
+  `<file>.corrupt-<date>` instead of being overwritten
+- Transient request failures (429/5xx) are retried with backoff (`internal/httpx`)
 
 ---
 
@@ -398,14 +420,19 @@ cmd/
 
 internal/
 ├── vdf/            # shortcuts.vdf parser
-├── steam/          # Steam discovery, shortcuts & grid
+├── steam/          # Steam discovery (native/Flatpak/Snap), shortcuts & grid
 ├── match/          # Store search/auto-match & metadata
 ├── artwork/        # Art download (CDN + URLs) to grid
 ├── sgdb/           # SteamGridDB API client
 ├── store/          # Local JSON matches + logs
 ├── delisted/       # Steam delisted games index
+├── official/       # Official Steam CDN assets (grid/hero/logo/icon)
+├── grid/           # Grid file naming/lock/backup rules
+├── atomicfile/     # Atomic writes (tmp + rename)
+├── httpx/          # HTTP requests with retry/backoff and context
 ├── title/          # Title normalization for matching
-└── i18n/           # PT-BR / EN translations
+├── i18n/           # PT-BR / EN translations
+└── icon/           # Embedded icon (PNG)
 ```
 
 ---
@@ -414,8 +441,8 @@ internal/
 
 See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full guide. Em resumo:
 
-1. Fork → branch → code → test (`make test`) → PR
-2. Follow `gofmt`, `go vet` and keep tests green
+1. Fork → branch → code → test (`make check`) → PR
+2. Follow `gofmt`, `go vet` and keep tests green (CI also runs `staticcheck` and `go test -race`)
 3. Comments in Portuguese (pt-BR)
 4. Releases are automatic via tags (`git tag vX.Y.Z && git push --tags`)
 

@@ -26,8 +26,9 @@ make          # compila ./steamart
    ```
 3. **Codifique** seguindo as regras:
    - `gofmt -w .` antes de commitar (formatação obrigatória) — use `make fmt`
-   - `go vet ./...` sem warnings — use `make vet`
+   - `go vet ./...` sem warnings (GUI e legado) — use `make check`
    - `go test ./...` verde — use `make test`
+   - `staticcheck` e `go test -race` também rodam no CI
    - Comentários em **português** (pt-BR)
 4. **Commit** com mensagem clara:
    ```bash
