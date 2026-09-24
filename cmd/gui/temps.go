@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,8 +9,8 @@ import (
 )
 
 // downloadTemp baixa um recurso remoto para um arquivo temporário.
-func downloadTemp(url string) (string, error) {
-	data, err := fetchRemote(url)
+func downloadTemp(ctx context.Context, url string) (string, error) {
+	data, err := fetchRemote(ctx, url)
 	if err != nil {
 		return "", err
 	}

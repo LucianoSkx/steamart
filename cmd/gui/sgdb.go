@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -18,7 +19,7 @@ import (
 )
 
 func doSGDB(v shortcutView) {
-	if sgdbKey == "" {
+	if sgdbKey.Get() == "" {
 		dialog.ShowInformation(i18n.T("warning"), i18n.T("sgdb_key_missing"), mainWin)
 		return
 	}
@@ -48,7 +49,20 @@ func doSGDB(v shortcutView) {
 		defer tempsMu.Unlock()
 		temps = append(temps, p)
 	}
+	// applied é lido por makeCard em goroutines e escrito ao aplicar —
+	// protegido por mutex.
+	var appliedMu sync.Mutex
 	applied := map[string]bool{}
+	isApplied := func(k string) bool {
+		appliedMu.Lock()
+		defer appliedMu.Unlock()
+		return applied[k]
+	}
+	markApplied := func(k string) {
+		appliedMu.Lock()
+		defer appliedMu.Unlock()
+		applied[k] = true
+	}
 
 	type galleryItem struct {
 		im    sgdb.Image
@@ -87,7 +101,7 @@ func doSGDB(v shortcutView) {
 
 	makeCard := func(it galleryItem) fyne.CanvasObject {
 		var img *canvas.Image
-		if p, err := downloadTemp(itemThumb(it)); err == nil {
+		if p, err := downloadTemp(appCtx, itemThumb(it)); err == nil {
 			addTemp(p)
 			img = canvas.NewImageFromFile(p)
 			img.FillMode = canvas.ImageFillContain
@@ -103,7 +117,7 @@ func doSGDB(v shortcutView) {
 						ui(func() { dialog.ShowError(fmt.Errorf("erro ao aplicar: %v", r), mainWin) })
 					}
 				}()
-				if _, err := artwork.SaveURL(itemApplyURL(it), steamClient.Grid, v.Shortcut.AppID, itemKind(it)); err != nil {
+				if _, err := artwork.SaveURL(appCtx, itemApplyURL(it), steamClient.Grid, v.Shortcut.AppID, itemKind(it)); err != nil {
 					ui(func() { dialog.ShowError(err, mainWin) })
 					return
 				}
@@ -116,13 +130,13 @@ func doSGDB(v shortcutView) {
 				}
 				ui(renderList)
 				ui(func() {
-					applied[itemThumb(it)] = true
+					markApplied(itemThumb(it))
 					applyBtn.SetText(i18n.T("applied"))
 					applyBtn.Disable()
 				})
 			}()
 		})
-		if applied[itemThumb(it)] {
+		if isApplied(itemThumb(it)) {
 			applyBtn.SetText(i18n.T("applied"))
 			applyBtn.Disable()
 		}
@@ -133,15 +147,16 @@ func doSGDB(v shortcutView) {
 		)
 	}
 
-	gen := 0
+	var gen atomic.Int64
 	loadInto := func(asset string) {
 		currentAsset = asset
-		gen++
-		myGen := gen
+		myGen := gen.Add(1)
+		src := currentSource
+		checked := anim.Checked
 		ui(func() { spinner.Show() })
 		imgBox.Objects = imgBox.Objects[:0]
 		imgBox.Refresh()
-		if currentSource == "official" {
+		if src == "official" {
 			go func() {
 				var picked *official.Asset
 				if v.Match != nil {
@@ -154,11 +169,11 @@ func doSGDB(v shortcutView) {
 					}
 				}
 				ui(func() {
-					if myGen == gen {
+					if gen.Load() == myGen {
 						spinner.Hide()
 					}
 				})
-				if myGen != gen {
+				if gen.Load() != myGen {
 					return
 				}
 				if picked == nil {
@@ -184,13 +199,13 @@ func doSGDB(v shortcutView) {
 			if asset == "capsule" {
 				apiAsset, dims = "grid", "920x430"
 			}
-			imgs, err := sgdb.New(sgdbKey).Images(gameID, apiAsset, dims, anim.Checked)
+			imgs, err := sgdb.New(sgdbKey.Get()).Images(appCtx, gameID, apiAsset, dims, checked)
 			ui(func() {
-				if myGen == gen {
+				if gen.Load() == myGen {
 					spinner.Hide()
 				}
 			})
-			if myGen != gen {
+			if gen.Load() != myGen {
 				return
 			}
 			if err != nil {
@@ -209,7 +224,7 @@ func doSGDB(v shortcutView) {
 				go func() {
 					card := makeCard(galleryItem{im: im, asset: asset})
 					ui(func() {
-						if myGen != gen {
+						if gen.Load() != myGen {
 							return
 						}
 						imgBox.Add(card)
@@ -253,8 +268,9 @@ func doSGDB(v shortcutView) {
 	anim.OnChanged = func(bool) { loadInto(currentAsset) }
 
 	run := func() {
+		term := entry.Text
 		go func() {
-			gs, err := sgdb.New(sgdbKey).Search(entry.Text)
+			gs, err := sgdb.New(sgdbKey.Get()).Search(appCtx, term)
 			if err != nil {
 				ui(func() { dialog.ShowError(err, mainWin) })
 				return
@@ -351,7 +367,7 @@ func doSGDB(v shortcutView) {
 	// pré-carrega o jogo do atalho (sem busca manual)
 	if v.Match != nil {
 		go func() {
-			g, err := sgdb.New(sgdbKey).GameBySteamAppID(v.Match.SteamAppID)
+			g, err := sgdb.New(sgdbKey.Get()).GameBySteamAppID(appCtx, v.Match.SteamAppID)
 			if err != nil {
 				ui(func() { entry.SetText(v.Shortcut.AppName); run() })
 				return

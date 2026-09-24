@@ -57,7 +57,7 @@ func doDetails(v shortcutView) {
 	go func() {
 		meta := loadCachedMeta(v.Match.SteamAppID)
 		if meta == nil {
-			m, err := match.GetMeta(v.Match.SteamAppID)
+			m, err := match.GetMeta(appCtx, v.Match.SteamAppID)
 			if err != nil {
 				ui(func() {
 					spinner.Stop()
@@ -89,7 +89,7 @@ func detailsContent(meta *match.Meta) (fyne.CanvasObject, []string) {
 	rows := container.NewVBox()
 
 	if meta.HeaderImage != "" {
-		if p, err := downloadTemp(meta.HeaderImage); err == nil {
+		if p, err := downloadTemp(appCtx, meta.HeaderImage); err == nil {
 			temps = append(temps, p)
 			img := canvas.NewImageFromFile(p)
 			img.FillMode = canvas.ImageFillContain
@@ -134,7 +134,7 @@ func detailsContent(meta *match.Meta) (fyne.CanvasObject, []string) {
 			if i >= 6 {
 				break
 			}
-			if p, err := downloadTemp(s); err == nil {
+			if p, err := downloadTemp(appCtx, s); err == nil {
 				temps = append(temps, p)
 				img := canvas.NewImageFromFile(p)
 				img.FillMode = canvas.ImageFillContain

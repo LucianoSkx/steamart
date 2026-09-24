@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -35,11 +36,14 @@ var webFS embed.FS
 var port = 8731
 
 var (
-	steamClient   *steam.Steam
-	matches       *store.Store
-	logger        = &store.Logger{}
-	sgdbKey       string
-	delistedIndex *delisted.Index
+	steamClient *steam.Steam
+	matches     *store.Store
+	logger      = &store.Logger{}
+
+	// sgdbKey e delistedIndex são compartilhados entre handlers — protegidos
+	// por mutex embutidos.
+	sgdbKey       sgdb.Key
+	delistedIndex delisted.Holder
 )
 
 type shortcutView struct {
@@ -64,8 +68,8 @@ func main() {
 	if matches.Recovered != "" {
 		log.Printf("aviso: %s", matches.Recovered)
 	}
-	if idx := delisted.Ensure(nil, filepath.Join(s.Config, "delisted_index.json"), false); idx != nil {
-		delistedIndex = idx
+	if idx := delisted.Ensure(context.Background(), nil, filepath.Join(s.Config, "delisted_index.json"), false); idx != nil {
+		delistedIndex.Set(idx)
 	}
 	_ = logger.SetFile(filepath.Join(s.Config, "steamart.log"))
 	if matches.Recovered != "" {
@@ -76,7 +80,7 @@ func main() {
 			Key string `json:"key"`
 		}
 		if json.Unmarshal(b, &k) == nil {
-			sgdbKey = k.Key
+			sgdbKey.Set(k.Key)
 		}
 	}
 	logger.Add(fmt.Sprintf("Steam em %s (usuário %s)", s.Root, s.UserID))
@@ -147,7 +151,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "q vazio", 400)
 		return
 	}
-	res, err := match.Search(q)
+	res, err := match.Search(r.Context(), q)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -161,7 +165,7 @@ func handleMeta(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "appid inválido", 400)
 		return
 	}
-	m, err := match.GetMeta(appid)
+	m, err := match.GetMeta(r.Context(), appid)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -176,7 +180,7 @@ func handleAutoMatch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	res, err := match.AutoMatch(sc.AppName, delistedApps())
+	res, err := match.AutoMatch(r.Context(), sc.AppName, delistedApps())
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -211,7 +215,7 @@ func handleApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 404)
 		return
 	}
-	res, err := artwork.Download(body.ShortcutAppID, body.SteamAppID, steamClient.Grid)
+	res, err := artwork.Download(r.Context(), body.ShortcutAppID, body.SteamAppID, steamClient.Grid)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -235,7 +239,7 @@ func handleApply(w http.ResponseWriter, r *http.Request) {
 // SteamGridDB
 // ------------------------------------------------------------------
 func handleSGDBStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{"configured": sgdbKey != ""})
+	writeJSON(w, map[string]any{"configured": sgdbKey.Get() != ""})
 }
 
 func handleSGDBKey(w http.ResponseWriter, r *http.Request) {
@@ -250,17 +254,18 @@ func handleSGDBKey(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	sgdbKey = strings.TrimSpace(body.Key)
-	if err := steamClient.SaveJSON("steamart-sgdb.json", map[string]string{"key": sgdbKey}); err != nil {
+	key := strings.TrimSpace(body.Key)
+	sgdbKey.Set(key)
+	if err := steamClient.SaveJSON("steamart-sgdb.json", map[string]string{"key": key}); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
 	logger.Add("SteamGridDB API key salva")
-	writeJSON(w, map[string]any{"configured": sgdbKey != ""})
+	writeJSON(w, map[string]any{"configured": sgdbKey.Get() != ""})
 }
 
 func handleSGDBSearch(w http.ResponseWriter, r *http.Request) {
-	if sgdbKey == "" {
+	if sgdbKey.Get() == "" {
 		http.Error(w, "API key não configurada", 400)
 		return
 	}
@@ -269,7 +274,7 @@ func handleSGDBSearch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "q vazio", 400)
 		return
 	}
-	games, err := sgdb.New(sgdbKey).Search(q)
+	games, err := sgdb.New(sgdbKey.Get()).Search(r.Context(), q)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -278,7 +283,7 @@ func handleSGDBSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSGDBImages(w http.ResponseWriter, r *http.Request) {
-	if sgdbKey == "" {
+	if sgdbKey.Get() == "" {
 		http.Error(w, "API key não configurada", 400)
 		return
 	}
@@ -308,7 +313,7 @@ func handleSGDBImages(w http.ResponseWriter, r *http.Request) {
 			dims = "920x430"
 		}
 	}
-	images, err := sgdb.New(sgdbKey).Images(gameID, apiAsset, dims, animated)
+	images, err := sgdb.New(sgdbKey.Get()).Images(r.Context(), gameID, apiAsset, dims, animated)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -393,7 +398,7 @@ func handleSGDBApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 404)
 		return
 	}
-	dst, err := artwork.SaveURL(body.URL, steamClient.Grid, body.ShortcutAppID, body.Asset)
+	dst, err := artwork.SaveURL(r.Context(), body.URL, steamClient.Grid, body.ShortcutAppID, body.Asset)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -433,7 +438,7 @@ func handleAutoMatchAll(w http.ResponseWriter, r *http.Request) {
 		var name string
 		m := matches.Get(sc.AppID)
 		if m == nil {
-			res, e := match.AutoMatch(sc.AppName, delistedApps())
+			res, e := match.AutoMatch(r.Context(), sc.AppName, delistedApps())
 			if e != nil {
 				addErr(sc.AppName, e.Error())
 				continue
@@ -447,7 +452,7 @@ func handleAutoMatchAll(w http.ResponseWriter, r *http.Request) {
 		} else {
 			steamAppID, name = m.SteamAppID, m.Name
 		}
-		res, e := artwork.Download(sc.AppID, steamAppID, steamClient.Grid)
+		res, e := artwork.Download(r.Context(), sc.AppID, steamAppID, steamClient.Grid)
 		if e != nil {
 			addErr(sc.AppName, e.Error())
 			continue
@@ -495,10 +500,11 @@ func handleRemove(w http.ResponseWriter, r *http.Request) {
 }
 
 func delistedApps() []delisted.App {
-	if delistedIndex == nil {
+	idx := delistedIndex.Get()
+	if idx == nil {
 		return nil
 	}
-	return delistedIndex.Apps
+	return idx.Apps
 }
 
 func findShortcut(appid uint32) (*steam.Shortcut, error) {

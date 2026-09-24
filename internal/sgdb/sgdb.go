@@ -1,12 +1,16 @@
 package sgdb
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
+
+	"steamart/internal/httpx"
 )
 
 // base é o endpoint da API (variável para permitir testes com httptest).
@@ -51,14 +55,37 @@ func (i Image) DownloadURL(asset string) string {
 	return i.URL
 }
 
-func (c *Client) do(path string, out any) error {
-	req, err := http.NewRequest(http.MethodGet, base+path, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.APIKey)
-	req.Header.Set("User-Agent", "steamart/1.0")
-	resp, err := client.Do(req)
+// Key guarda a API key com segurança de concorrência: a UI grava enquanto
+// goroutines de busca/imagens leem.
+type Key struct {
+	mu sync.RWMutex
+	v  string
+}
+
+// Get devolve a key atual ("" se não configurada).
+func (k *Key) Get() string {
+	k.mu.RLock()
+	defer k.mu.RUnlock()
+	return k.v
+}
+
+// Set define a key atual.
+func (k *Key) Set(v string) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.v = v
+}
+
+func (c *Client) do(ctx context.Context, path string, out any) error {
+	resp, err := httpx.Do(client, func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+		req.Header.Set("User-Agent", "steamart/1.0")
+		return req, nil
+	})
 	if err != nil {
 		return err
 	}
@@ -81,19 +108,19 @@ func (c *Client) do(path string, out any) error {
 }
 
 // Search busca jogos pelo termo.
-func (c *Client) Search(term string) ([]Game, error) {
+func (c *Client) Search(ctx context.Context, term string) ([]Game, error) {
 	term = url.PathEscape(term)
 	var games []Game
-	if err := c.do("/search/autocomplete/"+term, &games); err != nil {
+	if err := c.do(ctx, "/search/autocomplete/"+term, &games); err != nil {
 		return nil, err
 	}
 	return games, nil
 }
 
 // GameBySteamAppID encontra o jogo do SGDB correspondente a um Steam appid.
-func (c *Client) GameBySteamAppID(steamAppID int) (*Game, error) {
+func (c *Client) GameBySteamAppID(ctx context.Context, steamAppID int) (*Game, error) {
 	var g Game
-	if err := c.do(fmt.Sprintf("/games/steam/%d", steamAppID), &g); err != nil {
+	if err := c.do(ctx, fmt.Sprintf("/games/steam/%d", steamAppID), &g); err != nil {
 		return nil, err
 	}
 	return &g, nil
@@ -103,7 +130,7 @@ func (c *Client) GameBySteamAppID(steamAppID int) (*Game, error) {
 // jogo. dims filtra por dimensão (ex.: "920x430" para capa horizontal); quando
 // animated=true, filtra por formatos animados (webp/gif).
 // A API da SteamGridDB usa nomes no plural (grids/heroes/logos/icons).
-func (c *Client) Images(gameID int, asset, dims string, animated bool) ([]Image, error) {
+func (c *Client) Images(ctx context.Context, gameID int, asset, dims string, animated bool) ([]Image, error) {
 	ep := asset + "s"
 	switch asset {
 	case "hero":
@@ -123,7 +150,7 @@ func (c *Client) Images(gameID int, asset, dims string, animated bool) ([]Image,
 		path += "?" + q.Encode()
 	}
 	var images []Image
-	if err := c.do(path, &images); err != nil {
+	if err := c.do(ctx, path, &images); err != nil {
 		return nil, err
 	}
 	return images, nil

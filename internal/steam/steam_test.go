@@ -4,7 +4,9 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func writeShortcuts(t *testing.T, dir string) {
@@ -123,5 +125,82 @@ func TestSaveJSONPermissao0600(t *testing.T) {
 	}
 	if out["key"] != "abc" {
 		t.Errorf("out = %v", out)
+	}
+}
+
+func fakeProfile(t *testing.T, root, profile string, mtime time.Time) {
+	t.Helper()
+	cfg := filepath.Join(root, "userdata", profile, "config")
+	if err := os.MkdirAll(cfg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(cfg, "shortcuts.vdf")
+	if err := os.WriteFile(p, []byte{0x08}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(p, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSteamRootsIncluiSnapEEtual(t *testing.T) {
+	roots := steamRoots("/steam-root", "/home/u")
+	want := []string{
+		"/steam-root",
+		"/home/u/.steam/steam",
+		"/home/u/.local/share/Steam",
+		"/home/u/.var/app/com.valvesoftware.Steam/.local/share/Steam",
+		"/home/u/snap/steam/common/.local/share/Steam",
+		"/home/u/snap/steam/current/.local/share/Steam",
+	}
+	if len(roots) != len(want) {
+		t.Fatalf("roots = %v", roots)
+	}
+	for i := range want {
+		if roots[i] != want[i] {
+			t.Errorf("roots[%d] = %q, want %q", i, roots[i], want[i])
+		}
+	}
+}
+
+func TestDiscoverEscolhePerfilMaisRecente(t *testing.T) {
+	home := t.TempDir()
+	antigo := time.Now().Add(-48 * time.Hour)
+	recente := time.Now().Add(-time.Hour)
+	// perfil antigo no root nativo, recente no Snap
+	fakeProfile(t, filepath.Join(home, ".local", "share", "Steam"), "111", antigo)
+	fakeProfile(t, filepath.Join(home, "snap", "steam", "common", ".local", "share", "Steam"), "222", recente)
+
+	s, err := discover("", home)
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if s.UserID != "222" {
+		t.Errorf("UserID = %q, want 222 (perfil mais recente)", s.UserID)
+	}
+	if !strings.Contains(s.Config, filepath.Join("snap", "steam", "common")) {
+		t.Errorf("Config = %q, want caminho do snap", s.Config)
+	}
+}
+
+func TestDiscoverSTEAMROOTComPrecedencia(t *testing.T) {
+	home := t.TempDir()
+	recente := time.Now()
+	fakeProfile(t, filepath.Join(home, ".local", "share", "Steam"), "111", time.Now().Add(-time.Hour))
+	root := t.TempDir()
+	fakeProfile(t, root, "999", recente)
+
+	s, err := discover(root, home)
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if s.UserID != "999" || s.Root != root {
+		t.Errorf("s = %+v, want perfil do STEAM_ROOT", s)
+	}
+}
+
+func TestDiscoverSemSteam(t *testing.T) {
+	if _, err := discover("", t.TempDir()); err == nil {
+		t.Error("sem Steam deveria dar erro")
 	}
 }

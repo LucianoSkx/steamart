@@ -5,6 +5,7 @@
 package delisted
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -13,9 +14,11 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"steamart/internal/atomicfile"
+	"steamart/internal/httpx"
 	"steamart/internal/title"
 )
 
@@ -57,14 +60,14 @@ func (i *Index) Fresh() bool {
 // Ensure devolve um índice fresco: o da memória, o do disco ou um recém
 // baixado (gravado em cache). Se tudo falhar, devolve o melhor disponível
 // (pode ser nil).
-func Ensure(mem *Index, cachePath string, force bool) *Index {
+func Ensure(ctx context.Context, mem *Index, cachePath string, force bool) *Index {
 	if mem != nil && !force && mem.Fresh() {
 		return mem
 	}
 	if idx := Load(cachePath); idx != nil && !force && idx.Fresh() {
 		return idx
 	}
-	if idx, err := Download(); err == nil {
+	if idx, err := Download(ctx); err == nil {
 		_ = Save(cachePath, idx)
 		return idx
 	}
@@ -75,13 +78,15 @@ func Ensure(mem *Index, cachePath string, force bool) *Index {
 }
 
 // Download baixa e parseia o índice de steam-tracker.com.
-func Download() (*Index, error) {
-	req, err := http.NewRequest(http.MethodGet, SourceURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "steamart/1.0")
-	resp, err := client.Do(req)
+func Download(ctx context.Context) (*Index, error) {
+	resp, err := httpx.Do(client, func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, SourceURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", "steamart/1.0")
+		return req, nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -210,4 +215,25 @@ func subset(a, b map[string]bool) bool {
 		}
 	}
 	return true
+}
+
+// Holder guarda o índice em memória com segurança de concorrência: a UI e o
+// servidor podem atualizar enquanto outras goroutines leem.
+type Holder struct {
+	mu  sync.RWMutex
+	idx *Index
+}
+
+// Get devolve o índice em memória (nil se ainda não houver).
+func (h *Holder) Get() *Index {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.idx
+}
+
+// Set define o índice em memória.
+func (h *Holder) Set(i *Index) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.idx = i
 }

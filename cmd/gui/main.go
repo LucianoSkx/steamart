@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"image/color"
@@ -19,21 +20,25 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"steamart/internal/delisted"
 	"steamart/internal/grid"
+	"steamart/internal/httpx"
 	"steamart/internal/i18n"
 	"steamart/internal/icon"
+	"steamart/internal/sgdb"
 	"steamart/internal/steam"
 	"steamart/internal/store"
 )
 
 var httpClient = &http.Client{Timeout: 60 * time.Second}
 
-func fetchRemote(url string) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "steamart/1.0")
-	resp, err := httpClient.Do(req)
+func fetchRemote(ctx context.Context, url string) ([]byte, error) {
+	resp, err := httpx.Do(httpClient, func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", "steamart/1.0")
+		return req, nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -50,17 +55,24 @@ const sgdbFile = "steamart-sgdb.json"
 var Version = "dev"
 
 var (
-	steamClient   *steam.Steam
-	matches       *store.Store
-	logger        *store.Logger
-	sgdbKey       string
-	delistedIndex *delisted.Index
-	appInstance   fyne.App
-	langSel       *widget.Select
-	mainWin       fyne.Window
-	statusLb      *widget.Label
-	listBox       *fyne.Container
-	listScr       *container.Scroll
+	steamClient *steam.Steam
+	matches     *store.Store
+	logger      *store.Logger
+
+	// appCtx cancela downloads/buscas em voo quando o usuário sai do app.
+	appCtx, appCancel = context.WithCancel(context.Background())
+
+	// sgdbKey e delistedIndex são lidos por goroutines de busca e gravados
+	// pela UI — protegidos por mutex embutidos.
+	sgdbKey       sgdb.Key
+	delistedIndex delisted.Holder
+
+	appInstance fyne.App
+	langSel     *widget.Select
+	mainWin     fyne.Window
+	statusLb    *widget.Label
+	listBox     *fyne.Container
+	listScr     *container.Scroll
 )
 
 type shortcutView struct {
@@ -111,6 +123,7 @@ func main() {
 	setContent()
 	mainWin.Resize(fyne.NewSize(900, 700))
 	mainWin.ShowAndRun()
+	appCancel()
 }
 
 func setContent() {
@@ -132,7 +145,7 @@ func loadSGDBKey() {
 		Key string `json:"key"`
 	}
 	if json.Unmarshal(b, &k) == nil {
-		sgdbKey = k.Key
+		sgdbKey.Set(k.Key)
 	}
 }
 

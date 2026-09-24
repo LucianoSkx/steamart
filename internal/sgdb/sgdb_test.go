@@ -1,6 +1,7 @@
 package sgdb
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -30,7 +31,7 @@ func TestSearchEnviaAuthorization(t *testing.T) {
 			"data":    []map[string]any{{"id": 1, "name": "Portal"}},
 		})
 	})
-	games, err := New("CHAVE-SECRETA").Search("portal")
+	games, err := New("CHAVE-SECRETA").Search(context.Background(), "portal")
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
@@ -54,7 +55,7 @@ func TestImagesMontaFiltros(t *testing.T) {
 			"data":    []map[string]any{{"id": 9, "url": "https://cdn/x.png"}},
 		})
 	})
-	imgs, err := New("k").Images(440, "hero", "920x430", true)
+	imgs, err := New("k").Images(context.Background(), 440, "hero", "920x430", true)
 	if err != nil {
 		t.Fatalf("Images: %v", err)
 	}
@@ -67,13 +68,43 @@ func TestImagesMontaFiltros(t *testing.T) {
 }
 
 func TestErroDeStatus(t *testing.T) {
+	var chamadas int
 	withServer(t, func(w http.ResponseWriter, r *http.Request) {
+		chamadas++
 		http.Error(w, "rate limited", http.StatusTooManyRequests)
 	})
-	if _, err := New("k").Search("x"); err == nil {
+	if _, err := New("k").Search(context.Background(), "x"); err == nil {
 		t.Fatal("status 429 deveria virar erro")
 	} else if !strings.Contains(err.Error(), "429") {
 		t.Errorf("erro = %v, quero menção a 429", err)
+	}
+	if chamadas != 3 {
+		t.Errorf("tentativas = %d, want 3 (retry em 429)", chamadas)
+	}
+}
+
+func TestRetrySucessoNaSegundaTentativa(t *testing.T) {
+	var chamadas int
+	withServer(t, func(w http.ResponseWriter, r *http.Request) {
+		chamadas++
+		if chamadas == 1 {
+			http.Error(w, "temporário", http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"data":    []map[string]any{{"id": 2, "name": "Portal 2"}},
+		})
+	})
+	games, err := New("k").Search(context.Background(), "portal 2")
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if chamadas != 2 {
+		t.Errorf("tentativas = %d, want 2", chamadas)
+	}
+	if len(games) != 1 || games[0].Name != "Portal 2" {
+		t.Errorf("games = %+v", games)
 	}
 }
 
@@ -81,7 +112,7 @@ func TestSucessoFalse(t *testing.T) {
 	withServer(t, func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"success": false})
 	})
-	if _, err := New("k").Search("x"); err == nil {
+	if _, err := New("k").Search(context.Background(), "x"); err == nil {
 		t.Fatal("success=false deveria virar erro")
 	}
 }

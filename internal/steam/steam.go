@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"steamart/internal/vdf"
 )
@@ -28,22 +29,41 @@ type Steam struct {
 	Grid     string
 }
 
-// Discover localiza a instalação da Steam no CachyOS/desktop Linux.
+// Discover localiza a instalação da Steam no Linux (nativa, Flatpak, Snap ou
+// via STEAM_ROOT). Com vários perfis, escolhe o que tiver shortcuts.vdf mais
+// recente — em vez do primeiro encontrado.
 func Discover() (*Steam, error) {
-	roots := []string{}
-	if v := os.Getenv("STEAM_ROOT"); v != "" {
-		roots = append(roots, v)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = ""
 	}
-	if h, err := os.UserHomeDir(); err == nil {
+	return discover(os.Getenv("STEAM_ROOT"), home)
+}
+
+// steamRoots lista os roots candidatos, na ordem de precedência.
+func steamRoots(steamRoot, home string) []string {
+	roots := []string{}
+	if steamRoot != "" {
+		roots = append(roots, steamRoot)
+	}
+	if home != "" {
 		roots = append(roots,
-			filepath.Join(h, ".steam", "steam"),
-			filepath.Join(h, ".local", "share", "Steam"),
-			// Steam instalado via Flatpak (comum em distros como Fedora, Pop!_OS, Endeavour)
-			filepath.Join(h, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"),
+			filepath.Join(home, ".steam", "steam"),
+			filepath.Join(home, ".local", "share", "Steam"),
+			// Steam via Flatpak (Fedora, Pop!_OS, Endeavour...)
+			filepath.Join(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"),
+			// Steam via Snap (dados em common; current é symlink de revisão)
+			filepath.Join(home, "snap", "steam", "common", ".local", "share", "Steam"),
+			filepath.Join(home, "snap", "steam", "current", ".local", "share", "Steam"),
 		)
 	}
+	return roots
+}
 
-	for _, r := range roots {
+func discover(steamRoot, home string) (*Steam, error) {
+	var best *Steam
+	var bestMTime time.Time
+	for _, r := range steamRoots(steamRoot, home) {
 		root, err := filepath.EvalSymlinks(r)
 		if err != nil {
 			root = r
@@ -58,19 +78,26 @@ func Discover() (*Steam, error) {
 				continue
 			}
 			cfg := filepath.Join(ud, e.Name(), "config")
-			if _, err := os.Stat(filepath.Join(cfg, "shortcuts.vdf")); err != nil {
+			fi, err := os.Stat(filepath.Join(cfg, "shortcuts.vdf"))
+			if err != nil {
 				continue
 			}
-			return &Steam{
-				Root:     root,
-				UserID:   e.Name(),
-				UserData: ud,
-				Config:   cfg,
-				Grid:     filepath.Join(cfg, "grid"),
-			}, nil
+			if best == nil || fi.ModTime().After(bestMTime) {
+				bestMTime = fi.ModTime()
+				best = &Steam{
+					Root:     root,
+					UserID:   e.Name(),
+					UserData: ud,
+					Config:   cfg,
+					Grid:     filepath.Join(cfg, "grid"),
+				}
+			}
 		}
 	}
-	return nil, fmt.Errorf("instalação da Steam com atalhos não encontrada")
+	if best == nil {
+		return nil, fmt.Errorf("instalação da Steam com atalhos não encontrada")
+	}
+	return best, nil
 }
 
 // Shortcuts lê e devolve os atalhos não-Steam.

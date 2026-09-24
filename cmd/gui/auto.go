@@ -16,14 +16,14 @@ import (
 // Se a loja não achar, tenta o índice de jogos delisted.
 func doAutoSteam(v shortcutView) {
 	go func() {
-		if idx := delisted.Ensure(delistedIndex, filepath.Join(steamClient.Config, "delisted_index.json"), false); idx != nil {
-			delistedIndex = idx
+		if idx := delisted.Ensure(appCtx, delistedIndex.Get(), filepath.Join(steamClient.Config, "delisted_index.json"), false); idx != nil {
+			delistedIndex.Set(idx)
 		}
 		var apps []delisted.App
-		if delistedIndex != nil {
-			apps = delistedIndex.Apps
+		if idx := delistedIndex.Get(); idx != nil {
+			apps = idx.Apps
 		}
-		r, err := match.AutoMatch(v.Shortcut.AppName, apps)
+		r, err := match.AutoMatch(appCtx, v.Shortcut.AppName, apps)
 		if err != nil {
 			ui(func() { dialog.ShowError(err, mainWin) })
 			return
@@ -41,7 +41,7 @@ func doAutoSteam(v shortcutView) {
 // applySteam baixa as artes oficiais da loja Steam e as grava na grid do atalho.
 func applySteam(v shortcutView, steamAppID int, name string) {
 	go func() {
-		res, err := artwork.Download(v.Shortcut.AppID, steamAppID, steamClient.Grid)
+		res, err := artwork.Download(appCtx, v.Shortcut.AppID, steamAppID, steamClient.Grid)
 		if err != nil {
 			ui(func() { dialog.ShowError(err, mainWin) })
 			return

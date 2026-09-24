@@ -1,6 +1,7 @@
 package match
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"steamart/internal/delisted"
+	"steamart/internal/httpx"
 	"steamart/internal/title"
 )
 
@@ -45,13 +47,15 @@ type Meta struct {
 	DeckCategory int      `json:"deck_category"`
 }
 
-func getJSON(url string, v any) error {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", "steamart/1.0")
-	resp, err := client.Do(req)
+func getJSON(ctx context.Context, url string, v any) error {
+	resp, err := httpx.Do(client, func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", "steamart/1.0")
+		return req, nil
+	})
 	if err != nil {
 		return err
 	}
@@ -67,13 +71,13 @@ func getJSON(url string, v any) error {
 }
 
 // Search busca apps Steam por nome.
-func Search(term string) ([]SearchResult, error) {
+func Search(ctx context.Context, term string) ([]SearchResult, error) {
 	url := fmt.Sprintf(storeSearch, url.QueryEscape(term))
 	var out struct {
 		Total int            `json:"total"`
 		Items []SearchResult `json:"items"`
 	}
-	if err := getJSON(url, &out); err != nil {
+	if err := getJSON(ctx, url, &out); err != nil {
 		return nil, err
 	}
 	return out.Items, nil
@@ -82,8 +86,8 @@ func Search(term string) ([]SearchResult, error) {
 // AutoMatch escolhe o melhor resultado de busca para um nome de atalho.
 // Primeiro tenta a loja (descartando variantes não-primárias quando há
 // alternativas); se nada casar bem, tenta o índice de jogos delisted.
-func AutoMatch(term string, delistedApps []delisted.App) (*SearchResult, error) {
-	results, err := Search(term)
+func AutoMatch(ctx context.Context, term string, delistedApps []delisted.App) (*SearchResult, error) {
+	results, err := Search(ctx, term)
 	if err != nil {
 		return nil, err
 	}
@@ -155,10 +159,10 @@ func matchScore(term, name string) float64 {
 }
 
 // GetMeta busca os detalhes completos de um app.
-func GetMeta(appid int) (*Meta, error) {
+func GetMeta(ctx context.Context, appid int) (*Meta, error) {
 	url := fmt.Sprintf(appDetails, appid)
 	var raw map[string]json.RawMessage
-	if err := getJSON(url, &raw); err != nil {
+	if err := getJSON(ctx, url, &raw); err != nil {
 		return nil, err
 	}
 	entry, ok := raw[fmt.Sprintf("%d", appid)]

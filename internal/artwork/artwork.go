@@ -1,6 +1,7 @@
 package artwork
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"steamart/internal/atomicfile"
 	"steamart/internal/grid"
+	"steamart/internal/httpx"
 )
 
 const cdn = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/%d/%s"
@@ -37,7 +39,7 @@ type Result struct {
 
 // Download baixa as artes do app Steam (steamAppID) e grava na grid do
 // atalho (shortcutAppID). Retorna os arquivos escritos.
-func Download(shortcutAppID uint32, steamAppID int, gridDir string) (*Result, error) {
+func Download(ctx context.Context, shortcutAppID uint32, steamAppID int, gridDir string) (*Result, error) {
 	if err := os.MkdirAll(gridDir, 0o755); err != nil {
 		return nil, err
 	}
@@ -45,11 +47,11 @@ func Download(shortcutAppID uint32, steamAppID int, gridDir string) (*Result, er
 	for _, t := range targets {
 		url := fmt.Sprintf(cdn, steamAppID, t.asset)
 		ext := filepath.Ext(t.asset)
-		data, ctype, err := fetch(url)
+		data, ctype, err := fetch(ctx, url)
 		if err != nil || len(data) == 0 {
 			if t.fallback != "" {
 				url = fmt.Sprintf(cdn, steamAppID, t.fallback)
-				data, _, err = fetch(url)
+				data, _, err = fetch(ctx, url)
 			}
 			if err != nil || len(data) == 0 {
 				continue
@@ -66,13 +68,15 @@ func Download(shortcutAppID uint32, steamAppID int, gridDir string) (*Result, er
 	return res, nil
 }
 
-func fetch(url string) ([]byte, string, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, "", err
-	}
-	req.Header.Set("User-Agent", "steamart/1.0")
-	resp, err := client.Do(req)
+func fetch(ctx context.Context, url string) ([]byte, string, error) {
+	resp, err := httpx.Do(client, func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", "steamart/1.0")
+		return req, nil
+	})
 	if err != nil {
 		return nil, "", err
 	}
@@ -101,11 +105,11 @@ func Suffix(asset string) string {
 }
 
 // SaveURL baixa uma URL arbitrária e a grava na grid do atalho.
-func SaveURL(url string, gridDir string, appid uint32, asset string) (string, error) {
+func SaveURL(ctx context.Context, url string, gridDir string, appid uint32, asset string) (string, error) {
 	if err := os.MkdirAll(gridDir, 0o755); err != nil {
 		return "", err
 	}
-	data, _, err := fetch(url)
+	data, _, err := fetch(ctx, url)
 	if err != nil || len(data) == 0 {
 		return "", fmt.Errorf("falha ao baixar %s: %w", url, err)
 	}

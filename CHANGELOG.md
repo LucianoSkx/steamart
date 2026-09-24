@@ -23,13 +23,28 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/) e
 - Parser VDF reporta erro em `int32`/string truncados em vez de devolver 0
   silenciosamente
 - Corrida de dados na troca de idioma da UI (`i18n`)
+- Corridas de dados entre UI e goroutines: chave da SteamGridDB e índice de
+  jogos removidos agora ficam em structs com mutex (`sgdb.Key`,
+  `delisted.Holder`); a geração da galeria usa contador atômico e o mapa de
+  "já aplicado" também é protegido
+- Buscas e downloads capturam o estado dos widgets (texto de busca, checkbox
+  "só animados") na UI thread antes de disparar goroutine
+- Sair da GUI cancela downloads e buscas em voo; no servidor legado as
+  requisições acompanham o contexto do cliente (`r.Context()`)
+- Requisições com erro transitório (429/5xx, falha de rede) são retentadas
+  com backoff e `Retry-After` em vez de falhar na primeira
+- Steam instalada via Snap é detectada (`~/snap/steam/...`); havendo vários
+  perfis, o app escolhe o `shortcuts.vdf` mais recente em vez do primeiro
 
 ### Adicionado
 - Testes para `vdf`, `steam`, `store`, `grid`, `sgdb`, `official` e cobertura
   de acentos em `title`/`match` (pacotes testados: 4 → 10)
 - Pacote `internal/atomicfile` (escrita atômica) e `internal/grid` (regras de
   arquivos da grid, compartilhadas por GUI e servidor legado)
+- Pacote `internal/httpx` (requisições com retry/backoff e contexto)
 - CI: `gofmt`, `staticcheck`, testes com `-race` e relatório de cobertura
+- Testes para `httpx` (retry, cancelamento) e para a descoberta da Steam
+  (Snap, perfil mais recente, `STEAM_ROOT`)
 
 ## [v1.0.3] - 2026-08-18
 

@@ -70,8 +70,8 @@ func buildUI() fyne.CanvasObject {
 
 	sgdbEntry := widget.NewPasswordEntry()
 	sgdbEntry.SetPlaceHolder(i18n.T("key_placeholder"))
-	if sgdbKey != "" {
-		sgdbEntry.SetText(sgdbKey)
+	if k := sgdbKey.Get(); k != "" {
+		sgdbEntry.SetText(k)
 	}
 	saveKeyBtn := widget.NewButton(i18n.T("save_key"), func() {
 		k := strings.TrimSpace(sgdbEntry.Text)
@@ -80,7 +80,7 @@ func buildUI() fyne.CanvasObject {
 			return
 		}
 		saveSGDBKey(k)
-		sgdbKey = k
+		sgdbKey.Set(k)
 		sgdbEntry.SetText(k)
 		dialog.ShowInformation(i18n.T("ok"), i18n.T("key_saved"), mainWin)
 	})
