@@ -4,7 +4,7 @@ Todas as mudanças notáveis deste projeto são documentadas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/) e
 [Versionamento Semântico](https://semver.org/).
 
-## [Não lançado]
+## [v1.0.4] - 2026-09-24
 
 ### Corrigido
 - `steamart-matches.json` corrompido não destrói mais as associações: o arquivo
