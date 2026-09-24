@@ -13,6 +13,8 @@ func TestPickBest(t *testing.T) {
 		{"GTA V", []SearchResult{{AppID: 4, Name: "Grand Theft Auto V"}, {AppID: 5, Name: "Grand Theft Auto V - Soundtrack"}}, 4},
 		{"GTA V", []SearchResult{{AppID: 6, Name: "Grand Theft Auto V"}, {AppID: 7, Name: "Grand Theft Auto V: Official Score"}}, 6},
 		{"Baldur's Gate 3", []SearchResult{{AppID: 8, Name: "Baldurs Gate 3"}}, 8},
+		{"Pokemon", []SearchResult{{AppID: 10, Name: "Pokémon"}}, 10},
+		{"God of War", []SearchResult{{AppID: 11, Name: "God of War"}}, 11},
 		{"Stardew Valley", []SearchResult{{AppID: 9, Name: "Crysis"}}, 0},
 	}
 	for _, c := range cases {

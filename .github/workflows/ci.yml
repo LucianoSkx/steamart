@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Build, Vet & Test
+    name: Lint, Build & Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -41,5 +41,19 @@ jobs:
       - name: Vet (legacy-server, -tags legacy)
         run: go vet -tags legacy ./cmd/legacy-server/...
 
-      - name: Test
-        run: go test ./...
+      - name: gofmt
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "arquivos fora do padrão gofmt:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: Staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+
+      - name: Test (race + cobertura)
+        run: |
+          go test -race -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out | tail -n 1

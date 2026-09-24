@@ -1,12 +1,17 @@
 package store
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"steamart/internal/atomicfile"
 )
 
 const file = "steamart-matches.json"
@@ -24,16 +29,41 @@ type Store struct {
 	mu      sync.Mutex
 	path    string
 	Matches map[uint32]*Match `json:"matches"`
+
+	// Recovered descreve uma recuperação feita na abertura (ex.: arquivo
+	// corrompido preservado como .corrompido). Vazio quando nada ocorreu.
+	Recovered string
 }
 
+// Open carrega os matches de disco. Arquivo inexistente abre vazio. Arquivo
+// com JSON inválido NÃO é sobrescrito: ele é preservado em
+// <arquivo>.corrompido e o store abre vazio, com Store.Recovered preenchido.
 func Open(configDir string) (*Store, error) {
 	s := &Store{
 		path:    filepath.Join(configDir, file),
 		Matches: map[uint32]*Match{},
 	}
 	b, err := os.ReadFile(s.path)
-	if err == nil {
-		_ = json.Unmarshal(b, &s.Matches)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return s, nil
+		}
+		return nil, err
+	}
+	if len(bytes.TrimSpace(b)) == 0 {
+		return s, nil
+	}
+	var loaded map[uint32]*Match
+	if err := json.Unmarshal(b, &loaded); err != nil {
+		broken := fmt.Sprintf("%s.corrompido-%s", s.path, time.Now().Format("20060102-150405"))
+		if rerr := os.Rename(s.path, broken); rerr != nil {
+			return nil, fmt.Errorf("store corrompido (%s) e não foi possível preservá-lo: %w", s.path, err)
+		}
+		s.Recovered = fmt.Sprintf("%s inválido (%v); cópia preservada em %s e matches iniciados vazios", file, err, broken)
+		return s, nil
+	}
+	if loaded != nil {
+		s.Matches = loaded
 	}
 	return s, nil
 }
@@ -45,7 +75,7 @@ func (s *Store) Save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, b, 0o644)
+	return atomicfile.WriteFile(s.path, b, 0o644)
 }
 
 func (s *Store) Set(m *Match) {

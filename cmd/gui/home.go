@@ -10,12 +10,6 @@ import (
 	"strings"
 )
 
-func layoutSep() fyne.CanvasObject {
-	s := widget.NewSeparator()
-	s.Resize(fyne.NewSize(0, 12))
-	return s
-}
-
 // card cria o card visual de um atalho na home.
 func card(v shortcutView) fyne.CanvasObject {
 	sc := v.Shortcut

@@ -3,6 +3,7 @@ package i18n
 
 import (
 	"fmt"
+	"sync"
 )
 
 // Lang identifica um idioma suportado.
@@ -13,13 +14,25 @@ const (
 	EN   Lang = "en"
 )
 
-var current = PTBR
+// mu protege current: a UI troca o idioma enquanto goroutines traduzem.
+var (
+	mu      sync.RWMutex
+	current = PTBR
+)
 
 // Set define o idioma ativo.
-func Set(l Lang) { current = l }
+func Set(l Lang) {
+	mu.Lock()
+	defer mu.Unlock()
+	current = l
+}
 
 // Get retorna o idioma ativo.
-func Get() Lang { return current }
+func Get() Lang {
+	mu.RLock()
+	defer mu.RUnlock()
+	return current
+}
 
 type entry struct {
 	pt string
@@ -102,7 +115,7 @@ func T(key string, args ...any) string {
 		return key
 	}
 	s := e.pt
-	if current == EN {
+	if Get() == EN {
 		s = e.en
 	}
 	if len(args) > 0 {

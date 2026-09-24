@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"steamart/internal/atomicfile"
+	"steamart/internal/grid"
 )
 
 const cdn = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/%d/%s"
@@ -55,8 +58,7 @@ func Download(shortcutAppID uint32, steamAppID int, gridDir string) (*Result, er
 		}
 		_ = ctype
 		dst := filepath.Join(gridDir, fmt.Sprintf("%d%s%s", shortcutAppID, t.suffix, ext))
-		backupExisting(gridDir, filepath.Base(dst))
-		if err := os.WriteFile(dst, data, 0o644); err != nil {
+		if err := install(gridDir, filepath.Base(dst), data); err != nil {
 			return nil, err
 		}
 		res.Files[t.suffix] = dst
@@ -109,23 +111,21 @@ func SaveURL(url string, gridDir string, appid uint32, asset string) (string, er
 	}
 	ext := extFromURL(url)
 	dst := filepath.Join(gridDir, fmt.Sprintf("%d%s%s", appid, Suffix(asset), ext))
-	backupExisting(gridDir, filepath.Base(dst))
-	if err := os.WriteFile(dst, data, 0o644); err != nil {
+	if err := install(gridDir, filepath.Base(dst), data); err != nil {
 		return "", err
 	}
 	return dst, nil
 }
 
-// backupExisting move um arquivo já existente para grid/backup/ antes de
-// sobrescrevê-lo, preservando a arte anterior.
-func backupExisting(gridDir, name string) {
-	src := filepath.Join(gridDir, name)
-	if _, err := os.Stat(src); err != nil {
-		return
+// install move a arte existente para backup (sem sobrescrever a anterior) e
+// grava a nova de forma atômica, serializando com outros escritores da grid.
+func install(gridDir, name string, data []byte) error {
+	grid.Lock()
+	defer grid.Unlock()
+	if err := grid.BackupLocked(gridDir, name); err != nil {
+		return err
 	}
-	bk := filepath.Join(gridDir, "backup")
-	_ = os.MkdirAll(bk, 0o755)
-	_ = os.Rename(src, filepath.Join(bk, name))
+	return atomicfile.WriteFile(filepath.Join(gridDir, name), data, 0o644)
 }
 
 func extFromURL(url string) string {

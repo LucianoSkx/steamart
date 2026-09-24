@@ -11,11 +11,11 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"time"
 
+	"steamart/internal/atomicfile"
 	"steamart/internal/title"
 )
 
@@ -31,6 +31,10 @@ const (
 )
 
 var appLinkRe = regexp.MustCompile(`(?i)href='https://steam-tracker\.com/app/(\d+)/'[^>]*>\s*([^<]+?)\s*</a>`)
+
+// client evita http.DefaultClient (sem timeout): sem prazo, o download do
+// índice pendura o startup do servidor e as goroutines do GUI.
+var client = &http.Client{Timeout: 30 * time.Second}
 
 // App é um jogo delisted com seu appid original na Steam.
 type App struct {
@@ -77,7 +81,7 @@ func Download() (*Index, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "steamart/1.0")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -132,18 +136,11 @@ func Load(path string) *Index {
 
 // Save grava o índice no cache em disco (atômico via arquivo temporário).
 func Save(path string, idx *Index) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(idx, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return atomicfile.WriteFile(path, b, 0o644)
 }
 
 // ResolveAppID devolve o appid do jogo delisted que melhor casa com o

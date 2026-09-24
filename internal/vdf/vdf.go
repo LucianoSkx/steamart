@@ -83,26 +83,26 @@ func (r *reader) peek() (byte, bool) {
 	return r.b[r.i], true
 }
 
-func (r *reader) str() string {
+func (r *reader) str() (string, error) {
 	start := r.i
 	for r.i < len(r.b) {
 		if r.b[r.i] == 0 {
 			s := string(r.b[start:r.i])
 			r.i++
-			return s
+			return s, nil
 		}
 		r.i++
 	}
-	return string(r.b[start:])
+	return "", fmt.Errorf("string VDF sem terminador a partir de %d", start)
 }
 
-func (r *reader) int32() int32 {
+func (r *reader) int32() (int32, error) {
 	if r.i+4 > len(r.b) {
-		return 0
+		return 0, fmt.Errorf("int32 VDF truncado em %d (tamanho %d)", r.i, len(r.b))
 	}
 	v := int32(binary.LittleEndian.Uint32(r.b[r.i : r.i+4]))
 	r.i += 4
-	return v
+	return v, nil
 }
 
 // Set define ou atualiza o valor de uma chave neste nó.
@@ -179,27 +179,46 @@ func (r *reader) readNode(n *Node) error {
 		if t == 0x08 {
 			return nil
 		}
-		key := r.str()
+		key, err := r.str()
+		if err != nil {
+			return err
+		}
 		var val any
 		switch t {
 		case 0x00:
 			nb, _ := r.peek()
-			if nb == 0x08 || nb == 0x00 || nb == 0x01 || nb == 0x02 {
+			if nb <= 0x08 {
 				child := &Node{}
 				if err := r.readNode(child); err != nil {
 					return err
 				}
 				val = child
 			} else {
-				val = r.str()
+				s, err := r.str()
+				if err != nil {
+					return err
+				}
+				val = s
 			}
 		case 0x01:
-			val = r.str()
+			s, err := r.str()
+			if err != nil {
+				return err
+			}
+			val = s
 		case 0x02:
-			val = r.int32()
+			v, err := r.int32()
+			if err != nil {
+				return err
+			}
+			val = v
 		case 0x03:
 			// float32 (ignorado como valor numérico)
-			val = r.int32()
+			v, err := r.int32()
+			if err != nil {
+				return err
+			}
+			val = v
 		default:
 			return fmt.Errorf("tipo VDF desconhecido 0x%02x em %d", t, r.i)
 		}

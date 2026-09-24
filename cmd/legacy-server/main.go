@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -21,6 +22,7 @@ import (
 
 	"steamart/internal/artwork"
 	"steamart/internal/delisted"
+	"steamart/internal/grid"
 	"steamart/internal/match"
 	"steamart/internal/sgdb"
 	"steamart/internal/steam"
@@ -59,10 +61,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("não abri o store: %v", err)
 	}
+	if matches.Recovered != "" {
+		log.Printf("aviso: %s", matches.Recovered)
+	}
 	if idx := delisted.Ensure(nil, filepath.Join(s.Config, "delisted_index.json"), false); idx != nil {
 		delistedIndex = idx
 	}
 	_ = logger.SetFile(filepath.Join(s.Config, "steamart.log"))
+	if matches.Recovered != "" {
+		logger.Add("aviso: " + matches.Recovered)
+	}
 	if b, rerr := os.ReadFile(filepath.Join(s.Config, "steamart-sgdb.json")); rerr == nil {
 		var k struct {
 			Key string `json:"key"`
@@ -199,6 +207,10 @@ func handleApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "steam_appid inválido", 400)
 		return
 	}
+	if _, err := findShortcut(body.ShortcutAppID); err != nil {
+		http.Error(w, err.Error(), 404)
+		return
+	}
 	res, err := artwork.Download(body.ShortcutAppID, body.SteamAppID, steamClient.Grid)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -330,11 +342,10 @@ func handleGridFile(w http.ResponseWriter, r *http.Request) {
 
 func handleArt(w http.ResponseWriter, r *http.Request) {
 	appid := atoi(r.URL.Query().Get("appid"))
-	if appid == 0 {
+	if appid <= 0 || uint64(appid) > math.MaxUint32 {
 		http.Error(w, "appid inválido", 400)
 		return
 	}
-	prefix := fmt.Sprintf("%d", appid)
 	entries, err := os.ReadDir(steamClient.Grid)
 	if err != nil {
 		writeJSON(w, []any{})
@@ -343,7 +354,7 @@ func handleArt(w http.ResponseWriter, r *http.Request) {
 	var out []map[string]string
 	for _, e := range entries {
 		n := e.Name()
-		if !strings.HasPrefix(n, prefix) {
+		if e.IsDir() || !grid.BelongsToShortcut(n, uint32(appid)) {
 			continue
 		}
 		typ := "grid"
@@ -474,29 +485,10 @@ func handleRemove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 404)
 		return
 	}
-	prefix := fmt.Sprintf("%d", body.ShortcutAppID)
-	entries, err := os.ReadDir(steamClient.Grid)
+	removed, err := grid.Remove(steamClient.Grid, body.ShortcutAppID)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
-	}
-	removed := 0
-	backupDir := filepath.Join(steamClient.Grid, "backup")
-	_ = os.MkdirAll(backupDir, 0o755)
-	for _, e := range entries {
-		n := e.Name()
-		if !strings.HasPrefix(n, prefix) {
-			continue
-		}
-		rest := n[len(prefix):]
-		if rest == "" || (rest[0] != 'p' && rest[0] != '_') {
-			continue
-		}
-		src := filepath.Join(steamClient.Grid, n)
-		dst := filepath.Join(backupDir, n)
-		if err := os.Rename(src, dst); err == nil {
-			removed++
-		}
 	}
 	logger.Add(fmt.Sprintf("arte removida do atalho %d (%d arquivos)", body.ShortcutAppID, removed))
 	writeJSON(w, map[string]any{"removed": removed})

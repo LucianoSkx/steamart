@@ -40,17 +40,33 @@ func TestExtFromURL(t *testing.T) {
 	}
 }
 
-func TestBackupExisting(t *testing.T) {
+func TestInstallFazBackupEEscreveAtomico(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "123p.png")
-	if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(src, []byte("antiga"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	backupExisting(dir, "123p.png")
-	if _, err := os.Stat(src); !os.IsNotExist(err) {
-		t.Fatalf("arquivo original não foi movido: %v", err)
+	if err := install(dir, "123p.png", []byte("nova")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("nova arte não gravada: %v", err)
+	}
+	if string(got) != "nova" {
+		t.Errorf("conteúdo = %q, want %q", got, "nova")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "backup", "123p.png")); err != nil {
 		t.Fatalf("backup não encontrado: %v", err)
+	}
+	// segunda gravação não pode descartar o primeiro backup
+	if err := install(dir, "123p.png", []byte("nova2")); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, "backup", "123p.png")); err != nil || string(b) != "antiga" {
+		t.Errorf("primeiro backup destruído: %q, err=%v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "backup", "123p-2.png")); err != nil {
+		t.Errorf("segundo backup ausente: %v", err)
 	}
 }

@@ -11,10 +11,43 @@ func TestNormaliseTitle(t *testing.T) {
 		{"Half-Life 2: Episode One", "half life 2 episode one"},
 		{"Portal 2", "portal 2"},
 		{"Rock & Roll", "rock roll"},
+		{"Pokémon", "pokemon"},
+		{"Pokémon Red Version", "pokemon red version"},
+		{"Ação de Herói", "acao heroi"},
+		{"God of War Ragnarök", "god of war ragnarok"},
+		{"Çetin Ceviz", "cetin ceviz"},
 	}
 	for _, c := range cases {
 		if got := NormaliseTitle(c.in); got != c.want {
 			t.Errorf("NormaliseTitle(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestNormaliseTitleAcentosCasamSemAcento(t *testing.T) {
+	pares := [][2]string{
+		{"Pokémon", "Pokemon"},
+		{"Ação", "Acao"},
+		{"God of War Ragnarök", "God of War Ragnarok"},
+	}
+	for _, p := range pares {
+		a, b := NormaliseTitle(p[0]), NormaliseTitle(p[1])
+		if a != b {
+			t.Errorf("NormaliseTitle(%q)=%q != NormaliseTitle(%q)=%q", p[0], a, p[1], b)
+		}
+	}
+}
+
+func TestStripDiacritics(t *testing.T) {
+	cases := map[string]string{
+		"Pokémon": "Pokemon",
+		"ação":    "acao",
+		"ascii":   "ascii",
+		"ñandú":   "nandu",
+	}
+	for in, want := range cases {
+		if got := StripDiacritics(in); got != want {
+			t.Errorf("StripDiacritics(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

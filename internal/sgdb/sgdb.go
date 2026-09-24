@@ -9,7 +9,8 @@ import (
 	"time"
 )
 
-const base = "https://www.steamgriddb.com/api/v2"
+// base é o endpoint da API (variável para permitir testes com httptest).
+var base = "https://www.steamgriddb.com/api/v2"
 
 var client = &http.Client{Timeout: 30 * time.Second}
 

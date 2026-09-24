@@ -18,6 +18,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"steamart/internal/delisted"
+	"steamart/internal/grid"
 	"steamart/internal/i18n"
 	"steamart/internal/icon"
 	"steamart/internal/steam"
@@ -85,10 +86,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, "erro ao abrir store:", err)
 		os.Exit(1)
 	}
+	if matches.Recovered != "" {
+		fmt.Fprintln(os.Stderr, "aviso:", matches.Recovered)
+	}
 
 	st := &store.Logger{}
 	if err := st.SetFile(filepath.Join(c.Config, "steamart.log")); err == nil {
 		logger = st
+	}
+	if matches.Recovered != "" {
+		logger.Add("aviso: " + matches.Recovered)
 	}
 	loadSGDBKey()
 
@@ -181,24 +188,6 @@ func iconFor(sc steam.Shortcut) fyne.CanvasObject {
 	return nil
 }
 
-// belongsToShortcut indica se um arquivo da grid pertence ao atalho (pelo
-// prefixo de appid), cobrindo capa (sem sufixo), grid (p) e demais sufixos (_).
-func belongsToShortcut(name, prefix string) bool {
-	if !strings.HasPrefix(name, prefix) {
-		return false
-	}
-	rest := name[len(prefix):]
-	if rest == "" {
-		return false
-	}
-	switch strings.ToLower(filepath.Ext(name)) {
-	case ".jpg", ".jpeg", ".png", ".webp", ".gif":
-	default:
-		return false
-	}
-	return rest[0] == '.' || rest[0] == 'p' || rest[0] == '_'
-}
-
 // doClear remove toda a arte do atalho, movendo os arquivos para grid/backup/.
 func doClear(v shortcutView) {
 	dialog.ShowConfirm(i18n.T("remove_title"),
@@ -207,23 +196,10 @@ func doClear(v shortcutView) {
 			if !ok {
 				return
 			}
-			prefix := fmt.Sprintf("%d", v.Shortcut.AppID)
-			entries, err := os.ReadDir(steamClient.Grid)
+			removed, err := grid.Remove(steamClient.Grid, v.Shortcut.AppID)
 			if err != nil {
 				dialog.ShowError(err, mainWin)
 				return
-			}
-			bk := filepath.Join(steamClient.Grid, "backup")
-			_ = os.MkdirAll(bk, 0o755)
-			removed := 0
-			for _, e := range entries {
-				n := e.Name()
-				if !belongsToShortcut(n, prefix) {
-					continue
-				}
-				if err := os.Rename(filepath.Join(steamClient.Grid, n), filepath.Join(bk, n)); err == nil {
-					removed++
-				}
 			}
 			dialog.ShowInformation(i18n.T("remove_title"), i18n.T("removed", removed), mainWin)
 			renderList()

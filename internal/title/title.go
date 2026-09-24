@@ -6,6 +6,8 @@ import (
 	"html"
 	"regexp"
 	"strings"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 var (
@@ -14,16 +16,25 @@ var (
 	reEditions  = regexp.MustCompile(`\b(remaster(ed)?|hd|definitive|ultimate|complete|goty|edition)\b`)
 	reRegionVer = regexp.MustCompile(`\b(usa|europe|eur|japan|jp|world|rev|revision|beta|proto|prototype|demo|sample|en|fr|de|es|it|pt|br|v\d+(?:\.\d+)*)\b`)
 	reNonAlpha  = regexp.MustCompile(`[^a-z0-9]+`)
+	reCombining = regexp.MustCompile(`\p{Mn}`)
 	reSpaces    = regexp.MustCompile(`\s+`)
 )
 
+// StripDiacritics remove acentos/diacríticos mantendo a letra base:
+// "Pokémon" -> "pokemon", "Ação" -> "acao". Sem isso, a normalização
+// separaria letras acentuadas e o match falharia em títulos acentuados.
+func StripDiacritics(s string) string {
+	return norm.NFC.String(reCombining.ReplaceAllString(norm.NFD.String(s), ""))
+}
+
 // NormaliseTitle normaliza um título para comparação: remove marcações
 // (™/®/©), colchetes e parênteses, artigos, edições (remaster/hd/goty...),
-// regiões e versões.
+// regiões e versões. Acentos são reduzidos à letra base antes das regras.
 func NormaliseTitle(s string) string {
 	text := html.UnescapeString(s)
-	text = strings.ToLower(text)
 	text = strings.NewReplacer("™", "", "®", "", "©", "").Replace(text)
+	text = strings.ToLower(text)
+	text = StripDiacritics(text)
 	text = reBrackets.ReplaceAllString(text, " ")
 	text = reArticles.ReplaceAllString(text, " ")
 	text = reEditions.ReplaceAllString(text, " ")
